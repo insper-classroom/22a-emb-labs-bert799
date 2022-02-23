@@ -92,7 +92,7 @@ void blinkLED (Pio * led, const uint32_t led_mask);
 
 
 void blinkLED (Pio * led, const uint32_t led_mask){
-	for (int i = 0; i < 5; i++){
+	for (int i = 0; i < 25; i++){
 		pio_clear(led, led_mask);      // Coloca 1 no pino LED da placa
 		delay_ms(100);                        // Delay por software de 100 ms
 		pio_set(led, led_mask);    // Coloca 0 no pino do LED
