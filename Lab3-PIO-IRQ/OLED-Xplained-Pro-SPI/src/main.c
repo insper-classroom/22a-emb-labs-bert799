@@ -87,7 +87,7 @@ volatile char fall_freq_flag;
 /* prototype                                                            */
 /************************************************************************/
 void io_init(void);
-void pisca_led(int *pfreq);
+void pisca_led(int *pfreq, int n);
 void update_freq(int *pfreq);
 void oled_freq_update(int *pfreq);
 
@@ -126,6 +126,9 @@ void fall_freq_callback(void){
 /* funções                                                              */
 /************************************************************************/
 void pin_toggle(Pio *pio, uint32_t mask, int *pfreq) {
+	if(start_stop_flag){
+		return;
+	}
 	if(change_freq_flag || fall_freq_flag){
 		update_freq(pfreq);
 	}
@@ -136,11 +139,21 @@ void pin_toggle(Pio *pio, uint32_t mask, int *pfreq) {
 }
 
 // pisca led N vez no periodo T
-void pisca_led(int *pfreq){
-	for(int i=0; i < 2; i++){
-		pin_toggle(LED_PIO, LED_IDX_MASK, pfreq);
-		delay_ms((100 / *pfreq) / 2);
-  }
+void pisca_led(int *pfreq, int n){
+	gfx_mono_generic_draw_rect(80, 12, 30, 10, GFX_PIXEL_SET);
+	for(int count = 0; count < n; count++){
+		gfx_mono_generic_draw_filled_rect(80, 12, (30/n)+(30/n*count), 10, GFX_PIXEL_SET);
+		if(start_stop_flag){
+			start_stop_flag = 0;
+			gfx_mono_generic_draw_filled_rect(80, 12, 30, 10, GFX_PIXEL_CLR);
+			return;
+		}
+		for(int i=0; i < 2; i++){
+			pin_toggle(LED_PIO, LED_IDX_MASK, pfreq);
+			delay_ms((100 / *pfreq) / 2);
+		}
+	}
+	gfx_mono_generic_draw_filled_rect(80, 12, 30, 10, GFX_PIXEL_CLR);
 }
 
 void update_freq(int *pfreq){
@@ -267,6 +280,7 @@ void main(void)
 	
 	// Init da frequência em ms:
 	int freq = 1;
+	int n = 20;
 
 	// Desliga os LEDs
 	pio_set(LED_PIO, LED_IDX_MASK);
@@ -283,7 +297,8 @@ void main(void)
 	while(1)
   {
 	     while (start_stop_flag) {  //
-		     pisca_led(&freq);
+			 start_stop_flag = 0;
+		     pisca_led(&freq, n);
 		}
 		if(change_freq_flag || fall_freq_flag){
 			update_freq(&freq);
