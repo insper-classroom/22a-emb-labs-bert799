@@ -2,9 +2,19 @@
 # Automatically-generated file. Do not edit or delete the file
 ################################################################################
 
+src\ASF\common\components\display\ili9341\ili9341.c
+
 src\ASF\common\services\clock\same70\sysclk.c
 
 src\ASF\common\services\delay\sam\cycle_counter.c
+
+src\ASF\common\services\gfx\gfx_generic.c
+
+src\ASF\common\services\gfx\gfx_ili9341_sdt028atft.c
+
+src\ASF\common\services\gfx\gfx_text.c
+
+src\ASF\common\services\gfx\sysfont.c
 
 src\ASF\common\services\serial\usart_serial.c
 
