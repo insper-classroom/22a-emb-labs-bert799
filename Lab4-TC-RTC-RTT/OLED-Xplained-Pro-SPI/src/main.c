@@ -87,6 +87,17 @@ void TC2_Handler(void) {
 	pin_toggle(LED_PIO, LED_PIO_IDX_MASK);  
 }
 
+void TC0_Handler(void) {
+	/**
+	* Devemos indicar ao TC que a interrupção foi satisfeita.
+	* Isso é realizado pela leitura do status do periférico
+	**/
+	volatile uint32_t status = tc_get_status(TC0, 0);
+
+	/** Muda o estado do LED (pisca) **/
+	pin_toggle(LED3_PIO, LED3_PIO_IDX_MASK);  
+}
+
 void RTT_Handler(void) {
 	uint32_t ul_status;
 
@@ -292,9 +303,8 @@ int main (void)
 		}
 		
 		if(flag_rtc_alarm){
-			pin_toggle(LED3_PIO, LED3_PIO_IDX_MASK);
-			delay_ms(200);
-			pin_toggle(LED3_PIO, LED3_PIO_IDX_MASK);
+			TC_init(TC0, ID_TC0, 0, 6);
+			tc_start(TC0, 0);
 			flag_rtc_alarm = 0;
 		}
 		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
