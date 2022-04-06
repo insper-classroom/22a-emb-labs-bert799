@@ -24,54 +24,29 @@ volatile char flag_rtc_sec = 0;
 volatile char flag_but1 = 0;
 volatile char flag_echo = 0;
 volatile int tempo = 0;
-volatile float freq = (float) 1/(0.000058*2);
+volatile char flag_error= 0;
+int freq = 1/(0.000058*2);
 
 void BUT_init(Pio *pio, uint32_t ul_id, uint32_t mask, int estado);
 static void RTT_init(float freqPrescale, uint32_t IrqNPulses, uint32_t rttIRQSource);
 
 void echo_callback(void){
+	int alarm_time = ((float)4/340)*freq*2;
 	if (flag_echo == 0){
 		flag_echo = 1;
+		//rtt_enable(RTT);
+		//RTT_init(freq, alarm_time, RTT_MR_ALMIEN);
 		RTT_init(freq, 0, 0);
 		}
 	else{
 		flag_echo = 0;
 		tempo = rtt_read_timer_value(RTT);
+		//rtt_disable(RTT);
 		}
 }
 
 void but1_callback(void){
 	flag_but1 = 1;
-}
-
-void RTT_Handler(void) {
-	uint32_t ul_status;
-
-	/* Get RTT status - ACK */
-	ul_status = rtt_get_status(RTT);
-
-	/* IRQ due to Alarm */
-	if ((ul_status & RTT_SR_ALMS) == RTT_SR_ALMS) {
-		RTT_init(4, 0, RTT_MR_RTTINCIEN);
-	}
-	
-	/* IRQ due to Time has changed */
-	if ((ul_status & RTT_SR_RTTINC) == RTT_SR_RTTINC) {
-
-	}
-
-}
-
-static float get_time_rtt(){
-	uint ul_previous_time = rtt_read_timer_value(RTT);
-}
-
-void draw (int time){
-	char string [20];
-	float dist;
-	dist = ((float)time/(freq*2))*340;
-	sprintf(string, "dist: %2.2f m", dist);
-	gfx_mono_draw_string(string,0 ,0, &sysfont);
 }
 
 void BUT_init(Pio *pio, uint32_t ul_id, uint32_t mask, int estado) {
@@ -107,6 +82,49 @@ static void RTT_init(float freqPrescale, uint32_t IrqNPulses, uint32_t rttIRQSou
 	rtt_disable_interrupt(RTT, RTT_MR_RTTINCIEN | RTT_MR_ALMIEN);
 	
 }
+
+void RTT_Handler(void) {
+	uint32_t ul_status;
+
+	/* Get RTT status - ACK */
+	ul_status = rtt_get_status(RTT);
+
+	/* IRQ due to Alarm */
+	if ((ul_status & RTT_SR_ALMS) == RTT_SR_ALMS) {
+		flag_error = 1;
+	}
+	
+	/* IRQ due to Time has changed */
+	if ((ul_status & RTT_SR_RTTINC) == RTT_SR_RTTINC) {
+
+	}
+
+}
+
+static float get_time_rtt(){
+	uint ul_previous_time = rtt_read_timer_value(RTT);
+}
+
+void draw (int time, int *medicoes){
+	char string [20];
+	float dist;
+	dist = ((float)time/(freq*2))*340;
+	if(flag_error || dist > 4.0){
+		sprintf(string, "Erro. %2.2f m");
+		flag_error = 0;
+	}
+	else{
+		sprintf(string, "dist: %2.2f m", dist);
+		int i = 5 + 5**medicoes;
+		*medicoes+=1;
+		gfx_mono_generic_draw_filled_rect(0, 0, 127, 13, GFX_PIXEL_CLR);
+		gfx_mono_draw_string(string,0 ,0, &sysfont);
+		gfx_mono_generic_draw_rect(2, 14, 126, 18, GFX_PIXEL_SET);
+		gfx_mono_draw_filled_circle(i, (int)(115.68-13*dist)/3.98,  1, GFX_PIXEL_SET, GFX_WHOLE);
+	}
+}
+
+
 
 void io_init(void){	
 	BUT_init(BUT1_PIO, BUT1_PIO_ID, BUT1_PIO_IDX_MASK, 1);
@@ -147,15 +165,21 @@ int main (void)
 
 	// Init OLED
 	gfx_mono_ssd1306_init();
-
+	int medicoes = 0;
   /* Insert application code here, after the board has been initialized. */
 	while(1) {
 		if(flag_but1){
+			draw(tempo, &medicoes);
+			delay_ms(300);
+			if(medicoes>24){
+				medicoes = 0;
+				gfx_mono_generic_draw_filled_rect(3, 16, 124, 14, GFX_PIXEL_CLR);
+			}
 			flag_but1 = 0;
 			pio_set(TRG_PIO, TRG_PIO_IDX_MASK);
 			delay_us(10);
 			pio_clear(TRG_PIO, TRG_PIO_IDX_MASK);
-			draw(tempo);
+			
 		}
 		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
 	}
