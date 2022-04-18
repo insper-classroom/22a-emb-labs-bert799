@@ -118,7 +118,7 @@ static void task_adc(void *pvParameters) {
   adcData data;
 
   while (1) {
-    if (xQueueReceive(xQueuePROC, &(data), 1000)) {
+    if (xQueueReceive(xQueueADC, &(data), 1000)) {
       printf("ADC: %d \n", data);
     } else {
       printf("Nao chegou um novo dado em 1 segundo");
@@ -137,8 +137,10 @@ static void task_proc(void *pvParameters) {
 	uint sum;
 	uint mean;
 	while (1) {
+		sum = 0;
 		for(int i = 0; i < 10; i++){
 			if (xQueueReceive(xQueuePROC, &(adc), 1000)) {
+				//printf("\n%d\n", i);
 				sum += adc.value;
 			}
 			else {
