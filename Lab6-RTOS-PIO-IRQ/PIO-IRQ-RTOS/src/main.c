@@ -50,6 +50,8 @@ SemaphoreHandle_t xSemaphoreBut1;
 /** Queue for msg log send data */
 QueueHandle_t xQueueLedFreq;
 
+QueueHandle_t xQueueBut;
+
 /************************************************************************/
 /* prototypes local                                                     */
 /************************************************************************/
@@ -61,6 +63,8 @@ static void BUT1_init(void);
 void pin_toggle(Pio *pio, uint32_t mask);
 static void USART1_init(void);
 void LED_init(int estado);
+
+static void task_but(void *pvParameters);
 
 /************************************************************************/
 /* RTOS application funcs                                               */
@@ -105,13 +109,17 @@ extern void vApplicationMallocFailedHook(void) {
 /************************************************************************/
 
 void but_callback(void) {
-  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  xSemaphoreGiveFromISR(xSemaphoreBut, &xHigherPriorityTaskWoken);
+  //BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  //xSemaphoreGiveFromISR(xSemaphoreBut, &xHigherPriorityTaskWoken);
+  int increment = 100;
+  xQueueSendFromISR(xQueueBut, &increment, 0);
 }
 
 void but1_callback(void) {
-	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	xSemaphoreGiveFromISR(xSemaphoreBut1, &xHigherPriorityTaskWoken);
+	//BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	//xSemaphoreGiveFromISR(xSemaphoreBut1, &xHigherPriorityTaskWoken);
+	int increment = -100;
+	 xQueueSendFromISR(xQueueBut, &increment, 0);
 }
 
 /************************************************************************/
@@ -134,7 +142,7 @@ static void task_led(void *pvParameters) {
        */
       /* converte ms -> ticks */
       delayMs = msg / portTICK_PERIOD_MS;
-      printf("delay = %d \n", delayMs);
+      printf("delay = %d %d\n", delayMs, msg);
     }
 
     /* pisca LED */
@@ -147,32 +155,28 @@ static void task_led(void *pvParameters) {
 
 static void task_but(void *pvParameters) {
 
-  /* iniciliza botao */
-  BUT_init();
-  BUT1_init();
+	/* iniciliza botao */
+	BUT_init();
 
-  uint32_t delayTicks = 2000;
+	uint32_t delayTicks = 2000;
+	
+	
+	xQueueBut = xQueueCreate(32, sizeof(int));
+	if (xQueueBut == NULL)
+		printf("falha em criar a queue \n");
 
-  for (;;) {
-    /* aguarda por tempo inderteminado até a liberacao do semaforo */
-    if (xSemaphoreTake(xSemaphoreBut, 1000) || xSemaphoreTake(xSemaphoreBut1, 1000)) {
-      /* atualiza frequencia */
-		if (xSemaphoreTake(xSemaphoreBut1, 1000)) {
-			/* atualiza frequencia */
-			delayTicks += 100;
+	for (;;) {
+		int change_delay = 0;
+		/* aguarda por tempo inderteminado até a liberacao do semaforo */
+		if(xQueueReceive(xQueueBut, &change_delay, 10)){
+			printf("QueueBut received, %d\n", change_delay);
+			delayTicks += change_delay;
+			if (delayTicks == 100) {
+				delayTicks = 2000;
+			}
+			xQueueSend(xQueueLedFreq, (void *) &delayTicks, 10);
 		}
-		else if (xSemaphoreTake(xSemaphoreBut, 1000)){
-			delayTicks -= 100;
-		}
-      /* envia nova frequencia para a task_led */
-      xQueueSend(xQueueLedFreq, (void *)&delayTicks, 10);
-
-      /* garante range da freq. */
-      if (delayTicks == 100) {
-        delayTicks = 1000;
-      }
-    }
-  }
+	}
 }
 
 /************************************************************************/
@@ -204,44 +208,36 @@ void pin_toggle(Pio *pio, uint32_t mask) {
     pio_set(pio, mask);
 }
 
-void LED_init(int estado){
-	pmc_enable_periph_clk(LED_PIO_ID);
-	pio_set_output(LED_PIO, LED_IDX_MASK, estado, 0, 0);
-};
-
-
-static void BUT_init(void) {
-  /* conf botão como entrada */
-  pio_configure(BUT_PIO, PIO_INPUT, BUT_PIO_PIN_MASK,
-                PIO_PULLUP | PIO_DEBOUNCE);
-  pio_set_debounce_filter(BUT_PIO, BUT_PIO_PIN_MASK, 60);
-  pio_enable_interrupt(BUT_PIO, BUT_PIO_PIN_MASK);
-  pio_handler_set(BUT_PIO, BUT_PIO_ID, BUT_PIO_PIN_MASK, PIO_IT_FALL_EDGE,
-                  but_callback);
-
-  pio_get_interrupt_status(BUT_PIO);
-				  
-  /* configura prioridae */
-  NVIC_EnableIRQ(BUT_PIO_ID);
-  NVIC_SetPriority(BUT_PIO_ID, 4);
-
+void configure_output(Pio *p_pio, const pio_type_t ul_type, const uint32_t ul_mask, const uint32_t ul_attribute, uint32_t ul_id ){
+	pmc_enable_periph_clk(ul_id);
+	pio_configure(p_pio, ul_type, ul_mask, ul_attribute);
 }
 
-static void BUT1_init(void) {
-	/* conf botão como entrada */
-	pio_configure(BUT1_PIO, PIO_INPUT, BUT1_PIO_IDX_MASK,
-	PIO_PULLUP | PIO_DEBOUNCE);
-	pio_set_debounce_filter(BUT1_PIO, BUT1_PIO_IDX_MASK, 60);
-	pio_enable_interrupt(BUT1_PIO, BUT1_PIO_IDX_MASK);
-	pio_handler_set(BUT1_PIO, BUT1_PIO_ID, BUT1_PIO_IDX_MASK, PIO_IT_FALL_EDGE,
-	but1_callback);
+void configure_input(Pio *p_pio, const pio_type_t ul_type, const uint32_t ul_mask, const uint32_t ul_attribute, uint32_t ul_id){
+	pmc_enable_periph_clk(ul_id);
+	pio_configure(p_pio, ul_type, ul_mask, ul_attribute);
+	pio_set_debounce_filter(p_pio, ul_mask, 60);
+}
 
-	pio_get_interrupt_status(BUT1_PIO);
+void configure_interruption(Pio *p_pio, uint32_t ul_id, uint32_t ul_mask, uint32_t ul_attr, void (*p_handler) (uint32_t, uint32_t)){
+	pio_handler_set(p_pio, ul_id, ul_mask, ul_attr, p_handler);
+	pio_enable_interrupt(p_pio, ul_mask);
+	pio_get_interrupt_status(p_pio);
+	NVIC_EnableIRQ(ul_id);
+	NVIC_SetPriority(ul_id, 5);
+}
+
+void LED_init(int estado){
+	// LEDs OLED1
+	configure_output(LED_PIO, PIO_OUTPUT_0, LED_IDX_MASK, PIO_DEFAULT, LED_PIO_ID);
+}
+
+void BUT_init(void){
+	configure_input(BUT_PIO, PIO_INPUT, BUT_PIO_PIN_MASK, PIO_PULLUP | PIO_DEBOUNCE, BUT_PIO_ID);
+	configure_input(BUT1_PIO, PIO_INPUT, BUT1_PIO_IDX_MASK, PIO_PULLUP | PIO_DEBOUNCE, BUT1_PIO_ID);
 	
-	/* configura prioridae */
-	NVIC_EnableIRQ(BUT1_PIO_ID);
-	NVIC_SetPriority(BUT1_PIO_ID, 4);
-
+	configure_interruption(BUT_PIO, BUT_PIO_ID, BUT_PIO_PIN_MASK, PIO_IT_FALL_EDGE, but_callback);
+	configure_interruption(BUT1_PIO, BUT1_PIO_ID, BUT1_PIO_IDX_MASK, PIO_IT_FALL_EDGE, but1_callback);
 }
 
 /************************************************************************/
@@ -258,13 +254,6 @@ int main(void) {
   sysclk_init();
   board_init();
   configure_console();
-
-  /* Attempt to create a semaphore. */
-  xSemaphoreBut = xSemaphoreCreateBinary();
-  xSemaphoreBut1 = xSemaphoreCreateBinary();
-  if (xSemaphoreBut == NULL || xSemaphoreBut1 == NULL)
-    printf("falha em criar o semaforo \n");
-	
 
   /* cria queue com 32 "espacos" */
   /* cada espaço possui o tamanho de um inteiro*/
